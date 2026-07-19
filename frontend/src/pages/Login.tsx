@@ -85,7 +85,21 @@ export function Login() {
           )}
           <div className="field">
             <label>Workspace slug</label>
-            <input className="input" value={slug} onChange={(e) => setSlug(e.target.value)} required pattern="[a-z0-9-]+" placeholder="acme" />
+            <input
+              className="input"
+              value={slug}
+              onChange={(e) =>
+                setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""))
+              }
+              required
+              minLength={2}
+              placeholder="acme"
+            />
+            {mode === "register" && (
+              <span style={{ fontSize: 11.5, color: "var(--ink-3)" }}>
+                Lowercase letters, numbers and dashes — this identifies your workspace at sign-in.
+              </span>
+            )}
           </div>
           {mode === "register" && (
             <div className="field">

@@ -44,7 +44,19 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     let detail = response.statusText;
     try {
       const body = await response.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body.detail)) {
+        // FastAPI validation errors -> "field: message" lines, not raw JSON
+        detail = body.detail
+          .map((item: { loc?: (string | number)[]; msg?: string }) => {
+            const field = item.loc?.filter((p) => p !== "body").join(".");
+            return field ? `${field}: ${item.msg}` : item.msg;
+          })
+          .join("; ");
+      } else {
+        detail = JSON.stringify(body.detail);
+      }
     } catch {
       /* non-JSON error body */
     }
