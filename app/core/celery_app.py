@@ -59,3 +59,10 @@ celery.conf.update(
 )
 
 celery.autodiscover_tasks(["app.ingestion", "app.graph", "app.integrations", "app.evaluation"])
+
+# Worker processes import models through task modules only; FKs reference
+# tables by name and fail to resolve unless every model is in Base.metadata.
+# The API gets this for free via app.main — the worker needs it explicitly.
+from app.documents import models as _documents_models  # noqa: E402, F401
+from app.evaluation import models as _evaluation_models  # noqa: E402, F401
+from app.tenants import models as _tenants_models  # noqa: E402, F401

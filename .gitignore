@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .env
 .venv/
+node_modules/
+frontend/dist/
 .pytest_cache/
 .coverage
 *.egg-info/

@@ -26,6 +26,12 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", app=settings.app_name)
+    try:
+        from app.core.storage import ensure_bucket
+
+        ensure_bucket()
+    except Exception as exc:  # MinIO may lag behind on cold start; uploads re-raise anyway
+        logger.warning("minio_bucket_init_failed", error=str(exc))
     yield
     from app.core.database import engine
     from app.graph.client import close_async_driver
