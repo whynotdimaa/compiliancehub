@@ -6,7 +6,14 @@ httpx wrapper keeps the dependency tree flat and makes the provider swap
 
 Sync `complete` serves Celery workers (entity extraction); async `acomplete`
 serves API request paths (CRAG agent, Phase 5).
+
+Rate limits are handled here, once, for every caller: 429/5xx retry with the
+server's Retry-After honored (Groq free tier allows 30 RPM — an evaluation
+run alone makes ~50 calls, so backoff is not an edge case, it is the normal
+operating mode).
 """
+import asyncio
+import time
 from functools import lru_cache
 
 import httpx
@@ -14,6 +21,17 @@ import httpx
 from app.core.config import settings
 
 Message = dict[str, str]  # {"role": ..., "content": ...}
+
+_RETRYABLE_STATUS = {429, 500, 502, 503}
+_MAX_ATTEMPTS = 6
+
+
+def _retry_delay(response: httpx.Response, attempt: int) -> float:
+    header = response.headers.get("retry-after", "")
+    try:
+        return min(float(header) + 0.5, 30.0)
+    except ValueError:
+        return min(2.0**attempt, 15.0)
 
 
 class LLMError(Exception):
@@ -47,28 +65,34 @@ class OpenAICompatChatLLM:
     def complete(
         self, messages: list[Message], *, temperature: float = 0.0, max_tokens: int = 1024
     ) -> str:
+        payload = self._payload(messages, temperature, max_tokens)
         with httpx.Client(timeout=self._timeout) as client:
-            response = client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers,
-                json=self._payload(messages, temperature, max_tokens),
-            )
-        if response.status_code != 200:
-            raise LLMError(f"LLM request failed ({response.status_code}): {response.text[:500]}")
-        return self._content(response.json())
+            for attempt in range(_MAX_ATTEMPTS):
+                response = client.post(
+                    f"{self.base_url}/chat/completions", headers=self._headers, json=payload
+                )
+                if response.status_code == 200:
+                    return self._content(response.json())
+                if response.status_code not in _RETRYABLE_STATUS or attempt == _MAX_ATTEMPTS - 1:
+                    break
+                time.sleep(_retry_delay(response, attempt))
+        raise LLMError(f"LLM request failed ({response.status_code}): {response.text[:500]}")
 
     async def acomplete(
         self, messages: list[Message], *, temperature: float = 0.0, max_tokens: int = 1024
     ) -> str:
+        payload = self._payload(messages, temperature, max_tokens)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._headers,
-                json=self._payload(messages, temperature, max_tokens),
-            )
-        if response.status_code != 200:
-            raise LLMError(f"LLM request failed ({response.status_code}): {response.text[:500]}")
-        return self._content(response.json())
+            for attempt in range(_MAX_ATTEMPTS):
+                response = await client.post(
+                    f"{self.base_url}/chat/completions", headers=self._headers, json=payload
+                )
+                if response.status_code == 200:
+                    return self._content(response.json())
+                if response.status_code not in _RETRYABLE_STATUS or attempt == _MAX_ATTEMPTS - 1:
+                    break
+                await asyncio.sleep(_retry_delay(response, attempt))
+        raise LLMError(f"LLM request failed ({response.status_code}): {response.text[:500]}")
 
 
 @lru_cache
