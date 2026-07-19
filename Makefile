@@ -1,4 +1,4 @@
-.PHONY: up down logs migrate revision test test-integration lint
+.PHONY: up down logs migrate revision test test-integration lint seed
 
 up:
 	docker compose up -d --build
@@ -22,4 +22,7 @@ test-integration:
 	RUN_INTEGRATION=1 pytest tests/integration -q -m integration
 
 lint:
-	ruff check app tests
+	ruff check app tests alembic scripts
+
+seed:
+	python scripts/seed_demo.py

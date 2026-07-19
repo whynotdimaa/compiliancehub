@@ -79,11 +79,16 @@ def ingest_document(self, document_id: str, tenant_id: str) -> None:
         # Chunks are committed READY — enrich the knowledge graph asynchronously
         # on its own queue; a graph failure never affects document status.
         from app.graph.tasks import build_document_graph
+        from app.integrations.tasks import notify_slack
 
         build_document_graph.delay(document_id, tenant_id)
+        notify_slack.delay(f"✅ Document '{filename}' ingested: {count} chunks ready for audit")
         log.info("ingestion_finished", chunks=count)
     except ParsingError as exc:
+        from app.integrations.tasks import notify_slack
+
         _mark_failed(doc_id, ten_id, str(exc))
+        notify_slack.delay(f"❌ Document '{filename}' failed ingestion: {str(exc)[:200]}")
         log.warning("ingestion_failed_permanent", error=str(exc))
     except Exception as exc:
         _mark_failed(doc_id, ten_id, f"{type(exc).__name__}: {exc}")

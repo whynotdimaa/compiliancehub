@@ -59,8 +59,27 @@ Multi-tenant RAG platform for auditing corporate documentation (contracts, polic
 cp .env.example .env        # add GROQ_API_KEY / TAVILY_API_KEY
 make up                     # build + start all services
 make migrate                # apply Alembic migrations
+make seed                   # demo tenant + policy documents (waits for ingestion)
 open http://localhost:8000/docs
 ```
+
+## API surface
+
+| Endpoint | What it does |
+|---|---|
+| `POST /api/v1/auth/register` / `login` / `refresh` | tenant + JWT auth |
+| `POST /api/v1/documents` | upload PDF/DOCX/MD/TXT → async ingestion |
+| `POST /api/v1/documents/import` | import from URL / Google Drive share link |
+| `POST /api/v1/search` | hybrid search (vector + FTS + graph → RRF → reranker) with citations |
+| `POST /api/v1/ask` | CRAG agent: graded, corrected, cited answers |
+| `POST /api/v1/evaluation/runs` | score the pipeline with RAGAS metrics (golden or custom dataset) |
+| `GET /api/v1/evaluation/runs` | per-run metric averages |
+
+The demo flow after `make seed`: login as `admin@demo.io` / `demo-password-1`
+(slug `demo`), then ask *"How long is personal data retained?"* — the answer
+cites the retention section of the seeded policy. `POST /evaluation/runs {}`
+scores the golden dataset against those same documents. Slack notifications
+(ingestion/evaluation outcomes) activate when `SLACK_WEBHOOK_URL` is set.
 
 Service UIs: RabbitMQ management http://localhost:15672 · Neo4j browser http://localhost:7474 · MinIO console http://localhost:9001
 
@@ -82,4 +101,4 @@ make lint
 - [x] Phase 4 — GraphRAG: entity extraction → Neo4j knowledge graph → graph-augmented retrieval
 - [x] Phase 5 — CRAG agent: relevance grading → query rewrite → Tavily web-search fallback → cited answers
 - [x] Phase 6 — evaluation (RAGAS metrics + /evaluation API) + PII privacy layer (regex/Presidio)
-- [ ] Phase 7 — integrations: Slack notifications, Google Drive ingestion
+- [x] Phase 7 — polish: demo seed script, Slack notifications, URL/Google Drive import

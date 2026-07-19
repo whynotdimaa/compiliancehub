@@ -1,9 +1,16 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from app.documents.models import DocumentStatus, DocumentType
+
+
+class ImportUrlRequest(BaseModel):
+    url: HttpUrl
+    doc_type: DocumentType = DocumentType.OTHER
+    title: str | None = Field(default=None, max_length=512)
+    filename: str | None = Field(default=None, max_length=512)  # when headers/path lack one
 
 
 class DocumentOut(BaseModel):

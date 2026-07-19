@@ -7,8 +7,13 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from app.auth.deps import CurrentUser, TenantSession, require_role
 from app.core.config import settings
 from app.documents.models import DocumentType
-from app.documents.schemas import DocumentOut, DocumentStatusOut
+from app.documents.schemas import DocumentOut, DocumentStatusOut, ImportUrlRequest
 from app.documents.service import DocumentNotFoundError, DocumentService
+from app.integrations.drive import (
+    RemoteDownloadError,
+    RemoteFileTooLargeError,
+    download_remote,
+)
 from app.tenants.models import User, UserRole
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -46,7 +51,7 @@ async def upload_document(
     max_bytes = settings.max_upload_mb * 1024 * 1024
     if len(data) > max_bytes:
         raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
             f"File exceeds {settings.max_upload_mb} MB limit",
         )
     if not data:
@@ -60,6 +65,43 @@ async def upload_document(
         doc_type=doc_type,
         title=title,
         data=data,
+    )
+    return DocumentOut.model_validate(document)
+
+
+@router.post("/import", response_model=DocumentOut, status_code=status.HTTP_202_ACCEPTED)
+async def import_document(
+    data: ImportUrlRequest, user: Uploader, session: TenantSession
+) -> DocumentOut:
+    """Import from a URL — Google Drive share links are normalized to direct
+    download. Same validation and ingestion pipeline as a direct upload."""
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    try:
+        content, remote_name = await download_remote(str(data.url), max_bytes=max_bytes)
+    except RemoteFileTooLargeError as exc:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
+    except RemoteDownloadError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    filename = Path(data.filename or remote_name or "").name
+    extension = Path(filename).suffix.lower()
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Cannot determine a supported file type ('{filename}'); "
+            f"pass 'filename' explicitly, allowed: {sorted(ALLOWED_EXTENSIONS)}",
+        )
+    if not content:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Remote file is empty")
+
+    document = await DocumentService(session).create(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        filename=filename,
+        content_type=ALLOWED_EXTENSIONS[extension],
+        doc_type=data.doc_type,
+        title=data.title,
+        data=content,
     )
     return DocumentOut.model_validate(document)
 

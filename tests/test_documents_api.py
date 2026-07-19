@@ -148,6 +148,60 @@ async def test_get_missing_document_404(client: AsyncClient, admin_headers):
     assert resp.status_code == 404
 
 
+async def test_import_from_url(client: AsyncClient, admin_headers, mock_infra, monkeypatch):
+    async def fake_download(url, *, max_bytes):
+        # Drive-link normalization happens inside download_remote (mocked here)
+        # and is unit-tested in test_integrations.py
+        return b"# Policy\n\nImported content.", "imported_policy.md"
+
+    monkeypatch.setattr("app.documents.router.download_remote", fake_download)
+
+    resp = await client.post(
+        f"{DOCS}/import",
+        headers=admin_headers,
+        json={
+            "url": "https://drive.google.com/file/d/1AbC-xyz_123/view?usp=sharing",
+            "doc_type": "policy",
+        },
+    )
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["filename"] == "imported_policy.md"
+    assert body["status"] == "pending"
+    assert len(mock_infra["dispatched"]) == 1
+
+
+async def test_import_unsupported_remote_type(client: AsyncClient, admin_headers, monkeypatch):
+    async def fake_download(url, *, max_bytes):
+        return b"binary", "archive.zip"
+
+    monkeypatch.setattr("app.documents.router.download_remote", fake_download)
+    resp = await client.post(
+        f"{DOCS}/import", headers=admin_headers, json={"url": "https://example.com/archive.zip"}
+    )
+    assert resp.status_code == 415
+
+
+async def test_import_too_large_maps_to_413(client: AsyncClient, admin_headers, monkeypatch):
+    from app.integrations.drive import RemoteFileTooLargeError
+
+    async def fake_download(url, *, max_bytes):
+        raise RemoteFileTooLargeError("too big")
+
+    monkeypatch.setattr("app.documents.router.download_remote", fake_download)
+    resp = await client.post(
+        f"{DOCS}/import", headers=admin_headers, json={"url": "https://example.com/big.pdf"}
+    )
+    assert resp.status_code == 413
+
+
+async def test_import_forbidden_for_viewer(client: AsyncClient, viewer_headers):
+    resp = await client.post(
+        f"{DOCS}/import", headers=viewer_headers, json={"url": "https://example.com/a.pdf"}
+    )
+    assert resp.status_code == 403
+
+
 async def test_delete_admin_only(client: AsyncClient, admin_headers, viewer_headers, mock_infra):
     upload = await client.post(DOCS, headers=admin_headers, files={"file": MD_FILE})
     document_id = upload.json()["id"]

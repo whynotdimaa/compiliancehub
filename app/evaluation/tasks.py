@@ -74,6 +74,11 @@ async def _run(run_id: uuid.UUID, tenant_id: uuid.UUID, dataset_name: str, items
                         )
                     )
         log.info("evaluation_finished", items=len(items))
+        from app.integrations.tasks import notify_slack
+
+        notify_slack.delay(
+            f"📊 Evaluation run '{dataset_name}' finished: {len(items)} questions scored"
+        )
     finally:
         current_tenant_id.reset(token)
         await engine.dispose()

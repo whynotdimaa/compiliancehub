@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
       - name: Lint
-        run: ruff check app tests
+        run: ruff check app tests alembic scripts
       - name: Unit tests
         run: pytest tests -q --ignore=tests/integration --cov=app --cov-report=term-missing
 
