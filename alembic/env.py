@@ -14,6 +14,7 @@ from app.tenants import models as tenants_models  # noqa: F401
 
 try:
     from app.documents import models as documents_models  # noqa: F401
+    from app.evaluation import models as evaluation_models  # noqa: F401
 except ImportError:
     pass
 

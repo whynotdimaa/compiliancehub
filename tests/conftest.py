@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_session, get_tenant_session
 from app.core.tenant_context import current_tenant_id
 from app.documents.models import Document, DocumentChunk  # noqa: F401
+from app.evaluation.models import EvaluationRecord  # noqa: F401
 from app.main import app
 from app.tenants.models import Tenant, User  # noqa: F401
 

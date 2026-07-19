@@ -1,0 +1,26 @@
+[
+  {
+    "question": "How long must personal data be retained and when is it deleted?",
+    "ground_truth": "Personal data is retained for five years after the end of the customer relationship. After the retention period it is deleted or irreversibly anonymized."
+  },
+  {
+    "question": "Who is allowed to export customer records from the system?",
+    "ground_truth": "Only administrators may export customer records. Every export is logged with the user identity and timestamp."
+  },
+  {
+    "question": "What does GDPR Article 30 require from the organization?",
+    "ground_truth": "Article 30 requires maintaining a record of processing activities, including purposes of processing, categories of data subjects and recipients, and retention periods."
+  },
+  {
+    "question": "How are backups protected?",
+    "ground_truth": "Backups are encrypted at rest and tested for restorability on a regular schedule."
+  },
+  {
+    "question": "Which access control principle applies to internal systems?",
+    "ground_truth": "Access follows the least-privilege principle and is reviewed quarterly; privileged access requires multi-factor authentication."
+  },
+  {
+    "question": "What must happen after a personal data breach is detected?",
+    "ground_truth": "The incident response team must be notified immediately and the supervisory authority informed within 72 hours where required by GDPR."
+  }
+]

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.auth.deps import CurrentUser, TenantSession
 from app.core.llm import get_llm
+from app.privacy.masking import get_masker
 from app.rag.agent import AgentOutcome, CRAGAgent
 from app.rag.schemas import AskRequest, AskResponse, Citation
 from app.rag.web_search import tavily_search
@@ -19,7 +20,12 @@ async def ask(data: AskRequest, user: CurrentUser, session: TenantSession) -> As
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "LLM is not configured — set GROQ_API_KEY (or point LLM_BASE_URL at Ollama)",
         )
-    agent = CRAGAgent(retriever=HybridRetriever(session), llm=llm, web_search=tavily_search)
+    agent = CRAGAgent(
+        retriever=HybridRetriever(session),
+        llm=llm,
+        web_search=tavily_search,
+        masker=get_masker(),
+    )
     outcome = await agent.ask(data.question, doc_types=data.doc_types)
     return AskResponse(
         question=data.question,

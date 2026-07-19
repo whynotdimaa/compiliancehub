@@ -47,6 +47,10 @@ Multi-tenant RAG platform for auditing corporate documentation (contracts, polic
 
 **CRAG agent behind `POST /api/v1/ask`.** Plain RAG's failure mode is confidently answering from plausible-but-irrelevant chunks. The corrective loop: retrieve → grade every chunk in one batched LLM call → if too few survive, rewrite the query and re-retrieve → still too few, fall back to Tavily web search (optional) → generate with numbered context blocks. The generation prompt forbids uncited claims and invented regulation numbers; the response carries structured citations (document, section, page — or URL for web sources), the rewritten query, and a `low_confidence` flag when nothing relevant was found anywhere. Grading is deliberately fail-open: a broken grader call passes all chunks through — answering from unfiltered context beats refusing because a meta-call failed.
 
+**Evaluation: RAGAS metrics, natively implemented.** `POST /api/v1/evaluation/runs` queues a run (own Celery queue) that pushes a golden dataset — or a caller-supplied one — through the *production* /ask pipeline and judges each answer: faithfulness (fraction of answer claims supported by context), answer relevancy (cosine between the question and questions regenerated from the answer), context precision (Average Precision over the ranked contexts — relevance must also be ranked high) and context recall (fraction of ground-truth statements the context can support). Implemented directly on our LLM abstraction rather than via the `ragas` library — same paper definitions, no langchain stack, unit-testable math. Metrics land per-question in Postgres (RLS-protected, NULL ≠ 0 so uncomputable metrics don't poison averages); `GET /evaluation/runs` serves per-run aggregates.
+
+**PII never leaves the trust boundary unmasked.** Before any text reaches the LLM API or web search, a masking layer replaces emails, phones, Luhn-validated card numbers, IBANs and IPs with typed placeholders. The default engine is regex-based (deterministic, zero heavy deps — ISO dates and "Article 30" survive untouched); Presidio (NER, better recall on names) is an optional extra selected by config. The tenant's own API responses stay unmasked — the reader is authorized to see their documents, the model provider is not.
+
 **Ingestion is asynchronous and idempotent.** Upload returns `202` with a PENDING document; a Celery task (RLS-bound via `SET LOCAL`, same as the API) drives PENDING → PROCESSING → READY | FAILED. `task_acks_late` means a crashed worker's message is re-delivered, so the task deletes the document's chunks before inserting — re-runs converge instead of duplicating. Parse errors are permanent (FAILED, no retry); infrastructure errors retry with backoff and dead-letter after `max_retries`.
 
 ## Quickstart
@@ -77,5 +81,5 @@ make lint
 - [x] Phase 3 — hybrid retrieval: vector + full-text → RRF → cross-encoder reranking → metadata filters
 - [x] Phase 4 — GraphRAG: entity extraction → Neo4j knowledge graph → graph-augmented retrieval
 - [x] Phase 5 — CRAG agent: relevance grading → query rewrite → Tavily web-search fallback → cited answers
-- [ ] Phase 6 — evaluation (Ragas) + PII privacy layer (Presidio)
+- [x] Phase 6 — evaluation (RAGAS metrics + /evaluation API) + PII privacy layer (regex/Presidio)
 - [ ] Phase 7 — integrations: Slack notifications, Google Drive ingestion

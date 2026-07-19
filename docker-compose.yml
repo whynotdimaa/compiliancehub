@@ -22,7 +22,7 @@ services:
 
   worker:
     build: .
-    command: celery -A app.core.celery_app.celery worker -Q ingestion,graph,notifications -l info --concurrency=2
+    command: celery -A app.core.celery_app.celery worker -Q ingestion,graph,notifications,evaluation -l info --concurrency=2
     env_file: .env
     volumes:
       - ./app:/code/app

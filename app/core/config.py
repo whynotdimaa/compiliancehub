@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     search_top_k: int = 5
     rrf_k: int = 60
 
+    # Privacy
+    pii_engine: str = "regex"  # regex | presidio (pip install .[privacy]) | off
+
+    # Evaluation
+    eval_relevancy_questions: int = 3
+
     # RAG agent (CRAG)
     rag_min_relevant: int = 2       # fewer graded-relevant chunks triggers correction
     rag_max_context_chunks: int = 5

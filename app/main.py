@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.router import router as auth_router
 from app.core.config import settings
 from app.documents.router import router as documents_router
+from app.evaluation.router import router as evaluation_router
 from app.health import router as health_router
 from app.rag.router import router as ask_router
 from app.retrieval.router import router as search_router
@@ -54,3 +55,4 @@ app.include_router(auth_router, prefix=settings.api_v1_prefix)
 app.include_router(documents_router, prefix=settings.api_v1_prefix)
 app.include_router(search_router, prefix=settings.api_v1_prefix)
 app.include_router(ask_router, prefix=settings.api_v1_prefix)
+app.include_router(evaluation_router, prefix=settings.api_v1_prefix)

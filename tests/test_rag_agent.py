@@ -177,6 +177,41 @@ async def test_grading_failure_fails_open():
     assert outcome.rewritten_query is None
 
 
+async def test_pii_masked_for_llm_and_web_but_not_in_outcome():
+    from app.privacy.masking import RegexPIIMasker
+    from app.rag.web_search import WebResult
+
+    chunks = [
+        make_chunk("Contact dpo@corp.eu for retention questions."),
+        make_chunk("Retention is five years."),
+    ]
+    web_queries: list[str] = []
+
+    async def capture_web(query: str) -> list[WebResult]:
+        web_queries.append(query)
+        return []
+
+    # second retrieval returns nothing -> no second grading call
+    llm = ScriptedLLM(["[false, false]", "rewritten", "Answer."])
+    agent = CRAGAgent(
+        retriever=FakeRetriever([chunks, []]),
+        llm=llm,
+        web_search=capture_web,
+        masker=RegexPIIMasker(),
+    )
+
+    outcome = await agent.ask("Email john@acme.com asked how long we keep data?")
+
+    all_llm_text = str(llm.calls)
+    assert "dpo@corp.eu" not in all_llm_text
+    assert "john@acme.com" not in all_llm_text
+    assert "<EMAIL>" in all_llm_text
+    assert web_queries and "john@acme.com" not in web_queries[0]
+    # the tenant still sees their own unmasked text in citations
+    assert "dpo@corp.eu" in chunks[0].chunk.text
+    assert outcome.answer == "Answer."
+
+
 async def test_rewrite_identical_to_question_skips_second_retrieval():
     llm = ScriptedLLM(
         ["[false]", "How long do we keep data?", "Nothing found."]

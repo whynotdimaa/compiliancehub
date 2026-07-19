@@ -42,13 +42,20 @@ celery.conf.update(
                              "x-dead-letter-routing-key": "dead.graph"},
         ),
         Queue("notifications", routing_key="notifications"),
+        Queue(
+            "evaluation",
+            routing_key="evaluation",
+            queue_arguments={"x-dead-letter-exchange": "dlx",
+                             "x-dead-letter-routing-key": "dead.evaluation"},
+        ),
         Queue("dead_letter", dead_letter_exchange, routing_key="dead.#"),
     ),
     task_routes={
         "app.ingestion.tasks.*": {"queue": "ingestion"},
         "app.graph.tasks.*": {"queue": "graph"},
         "app.integrations.tasks.*": {"queue": "notifications"},
+        "app.evaluation.tasks.*": {"queue": "evaluation"},
     },
 )
 
-celery.autodiscover_tasks(["app.ingestion", "app.graph", "app.integrations"])
+celery.autodiscover_tasks(["app.ingestion", "app.graph", "app.integrations", "app.evaluation"])

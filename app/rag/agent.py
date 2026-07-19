@@ -25,6 +25,7 @@ import structlog
 
 from app.core.config import settings
 from app.core.llm import OpenAICompatChatLLM
+from app.privacy.masking import PIIMasker
 from app.rag import prompts
 from app.rag.web_search import WebResult
 from app.retrieval.service import RetrievedChunk
@@ -53,10 +54,18 @@ class CRAGAgent:
         retriever,
         llm: OpenAICompatChatLLM,
         web_search: WebSearchFn,
+        masker: PIIMasker | None = None,
     ) -> None:
         self.retriever = retriever
         self.llm = llm
         self.web_search = web_search
+        self.masker = masker
+
+    def _mask(self, text: str) -> str:
+        """PII leaves the process only masked (LLM API, web search).
+        Retrieval and the response payload keep original text — the tenant
+        reads their own documents; the third-party model does not."""
+        return self.masker.mask(text) if self.masker else text
 
     async def ask(self, question: str, *, doc_types=None) -> AgentOutcome:
         log = logger.bind(question=question[:120])
@@ -77,7 +86,7 @@ class CRAGAgent:
 
         web_results: list[WebResult] = []
         if len(relevant) < settings.rag_min_relevant:
-            web_results = await self.web_search(question)
+            web_results = await self.web_search(self._mask(question))
             log.info("crag_web_fallback", results=len(web_results))
 
         relevant = relevant[:top_k]
@@ -98,12 +107,15 @@ class CRAGAgent:
     ) -> list[RetrievedChunk]:
         if not chunks:
             return []
-        passages = [r.chunk.text for r in chunks]
+        passages = [self._mask(r.chunk.text) for r in chunks]
         try:
             raw = await self.llm.acomplete(
                 [
                     {"role": "system", "content": prompts.GRADER_SYSTEM},
-                    {"role": "user", "content": prompts.grader_user(question, passages)},
+                    {
+                        "role": "user",
+                        "content": prompts.grader_user(self._mask(question), passages),
+                    },
                 ]
             )
             verdicts = _parse_verdicts(raw, expected=len(chunks))
@@ -117,7 +129,7 @@ class CRAGAgent:
             raw = await self.llm.acomplete(
                 [
                     {"role": "system", "content": prompts.REWRITE_SYSTEM},
-                    {"role": "user", "content": question},
+                    {"role": "user", "content": self._mask(question)},
                 ]
             )
         except Exception as exc:
@@ -137,7 +149,7 @@ class CRAGAgent:
             location = r.chunk.heading_path or r.document.title
             page = f", p.{r.chunk.page}" if r.chunk.page else ""
             header = f"[{i}] (Document: {r.document.title} — {location}{page})"
-            blocks.append(f"{header}\n{r.chunk.text}")
+            blocks.append(f"{header}\n{self._mask(r.chunk.text)}")
         offset = len(chunks)
         for j, w in enumerate(web_results, start=offset + 1):
             blocks.append(f"[{j}] (Web: {w.title} — {w.url})\n{w.content}")
@@ -145,7 +157,7 @@ class CRAGAgent:
         return await self.llm.acomplete(
             [
                 {"role": "system", "content": prompts.ANSWER_SYSTEM},
-                {"role": "user", "content": prompts.answer_user(question, blocks)},
+                {"role": "user", "content": prompts.answer_user(self._mask(question), blocks)},
             ],
             max_tokens=2048,
         )
